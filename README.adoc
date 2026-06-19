@@ -1,86 +1,157 @@
 = Steps to deploy Cloudflare on Kubernetes
 
-once the k8s is up and running follow the followings:
-. login to cloudflare using the cli 
+Run a Cloudflare Tunnel from inside the cluster so Services are reachable on a
+public hostname without exposing any public IP on the cluster.
 
-.login
+== Prerequisites
+
+* A running Kubernetes cluster with `kubectl` access.
+* `cloudflared` on the machine you run the CLI steps from (see Install below).
+* A domain managed in your Cloudflare account (this guide uses `k8s.itlinux.cc`).
+
+== Install cloudflared
+
+Debian / Ubuntu (apt). The repo path must end in `/cloudflared` — a bare
+`https://pkg.cloudflare.com/ <codename> main` line 404s on the Release file:
+
+----
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+  | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
+----
+
+RHEL / CentOS / Rocky (dnf):
+
+----
+sudo dnf config-manager --add-repo https://pkg.cloudflare.com/cloudflared.repo
+sudo dnf install -y cloudflared
+----
+
+Verify:
+
+----
+cloudflared --version
+----
+
+== 1. Authenticate cloudflared
+
+Opens a browser; pick the zone for your hostname (e.g. `itlinux.cc`).
+
 ----
 cloudflared login
 ----
 
-.create the tunnel using cloudflared 
+== 2. Create the tunnel
+
 ----
 cloudflared tunnel create k8s
 ----
 
-.check your tunnel
+Check it:
+
 ----
 cloudflared tunnel list
 ----
 
-.output 
-----
-[root@rocky-tf-22 ~]# cloudflared tunnel list
-071d2411-9f29-4f6e-94d6-c0ca1179587c k8s    2026-01-27T18:55:06Z 1xlax08, 1xlax10, 2xslc01
-----
+Example output:
 
-.create the secret for cloudflared
 ----
-kubectl create secret generic cloudflared-credentials --from-file=credentials.json=.cloudflared/071d2411-9f29-4f6e-94d6-c0ca1179587c.json
+$ cloudflared tunnel list
+071d2411-9f29-4f6e-94d6-c0ca1179587c k8s  2026-01-27T18:55:06Z 1xlax08, 1xlax10, 2xslc01
 ----
 
-.check k8s secret
-----
-kubectl get secret cloudflared-credentials -o yaml
-----
+== 3. Route the hostname to the tunnel (DNS)
 
+This creates the proxied CNAME `<hostname>` -> `<tunnel-id>.cfargotunnel.com`
+in Cloudflare DNS. Without it the hostname will not resolve to the tunnel.
 
-.output
 ----
-apiVersion: v1
-data:
-  credentials.json: yyJBY2NvdW50VGFnIjoiMzJjZGNiMGQ3YWNiZjczYmRkMWUxOTRmZTZjOTUxZTYiLCJUdW5uZWxTZWNyZXQiOiJHVnFhZVFtY2ltSXFsSmFkeTltZ1dOSVIrTWcrT3Nucmo5SWZTZUVGRVRZPSIsIlR1bm5lbElEIjoiMDcxZDI0MTEtOWYyOS00ZjZlLTk0ZDYtYzBjYTExNzk1ODdjIiwiRW5kcG9pbnQiOiIifQ==
-kind: Secret
-metadata:
-  creationTimestamp: "2026-01-27T19:12:04Z"
-  name: cloudflared-credentials
-  namespace: default
-  resourceVersion: "21734"
-  uid: 21df4e76-71ab-41d3-8785-df5601f9a880
-type: Opaque
+cloudflared tunnel route dns k8s k8s.itlinux.cc
 ----
 
-Mkke sure the name matches otherwise you will need to edit the cloudflared file 
+Verify (returns Cloudflare proxy IPs, not the cfargotunnel target):
 
-Apply the cloudlflare manifest
-
-.cloudflare manifest
 ----
-kubectl apply -f cloudflared.yaml
+dig +short k8s.itlinux.cc
 ----
 
-.Check the status of the pod
-----
-kubectl get pod
-NAME                           READY   STATUS    RESTARTS   AGE
-cloudflared-7f998bd767-jpj88   1/1     Running   0          125m
-----
+== 4. Create the Kubernetes secret
 
+The manifest mounts the secret expecting the key `credentials.json`, so keep
+that exact key name. Substitute your own tunnel ID.
 
-Also check cloudflared logs 
 ----
-kubectl logs cloudflared-7f998bd767-jpj88
-2026-01-29T08:18:53Z INF Retrying connection in up to 1s connIndex=0 event=0 ip=198.41.192.107
-2026-01-29T08:18:53Z WRN Connection terminated error="datagram manager encountered a failure while serving" connIndex=1
-2026-01-29T08:18:54Z ERR failed to accept incoming stream requests error="failed to accept QUIC stream: timeout: no recent network activity" connIndex=2 event=0 ip=198.41.200.63
-2026-01-29T08:18:54Z ERR failed to run the datagram handler error="timeout: no recent network activity" connIndex=2 event=0 ip=198.41.200.63
-2026-01-29T08:18:54Z ERR failed to serve tunnel connection error="accept stream listener encountered a failure while serving" connIndex=2 event=0 ip=198.41.200.63
-2026-01-29T08:18:54Z ERR Serve tunnel error error="accept stream listener encountered a failure while serving" connIndex=2 event=0 ip=198.41.200.63
-2026-01-29T08:18:54Z INF Retrying connection in up to 1s connIndex=2 event=0 ip=198.41.200.63
-2026-01-29T08:18:55Z INF Tunnel connection curve preferences: [X25519MLKEM768 CurveP256] connIndex=0 event=0 ip=198.41.192.107
-2026-01-29T08:18:55Z INF Registered tunnel connection connIndex=0 connection=a54959ee-d749-485c-b10f-dd3777945e82 event=0 ip=198.41.192.107 location=den03 protocol=quic
+kubectl create secret generic cloudflared-credentials \
+  --from-file=credentials.json="$HOME/.cloudflared/<tunnel-id>.json"
 ----
 
+Check it (the data key must be `credentials.json`):
 
+----
+kubectl get secret cloudflared-credentials -o jsonpath='{.data}'; echo
+----
 
+NOTE: The `credentials.json` value is the tunnel secret. Never commit it to a
+public repo. If it is ever exposed, delete and recreate the tunnel.
 
+== 5. Make sure the origin Service exists
+
+The ConfigMap in `cloudflared.yml` routes the hostname to a backend Service:
+
+----
+ingress:
+- hostname: "k8s.itlinux.cc"
+  service: http://front.default.svc.cluster.local:80
+- service: http_status:404
+----
+
+Edit the `hostname` and `service` lines to match your real Service, namespace
+and port. The target Service must already exist, or cloudflared returns
+`no such host` / 502 even though the tunnel itself is healthy.
+
+Quick throwaway backend for testing (creates a `front` Service on port 80):
+
+----
+kubectl create deployment front --image=nginx
+kubectl expose deployment front --port=80
+----
+
+== 6. Apply the manifest
+
+----
+kubectl apply -f cloudflared.yml
+----
+
+Check the pod:
+
+----
+kubectl get pod -l app=cloudflared
+----
+
+Check the logs — look for `Registered tunnel connection`:
+
+----
+kubectl logs -l app=cloudflared --tail=20
+----
+
+== 7. Test end to end
+
+----
+curl -I https://k8s.itlinux.cc
+----
+
+`HTTP/2 200` means tunnel + DNS + ingress + origin are all wired correctly.
+
+== Troubleshooting
+
+Tunnel shows "down" / one connection flaps with `control stream encountered a
+failure` and `datagram handler ... context canceled`: usually QUIC datagrams
+hitting a reduced MTU on an overlay CNI (e.g. Calico VXLAN/IPIP). Force the
+HTTP/2 transport by adding `protocol: http2` to the ConfigMap `config.yaml`,
+then `kubectl rollout restart deploy/cloudflared`.
+
+`no such host` for the origin: the backend Service named in the ingress does
+not exist in that namespace (see step 5).
