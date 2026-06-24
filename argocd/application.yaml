@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudflared
+  namespace: argocd          # ArgoCD's own namespace (where Applications live)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/itlinux/cloudflare-k8s.git
+    targetRevision: argo      # this branch
+    path: manifests           # kustomize dir (cloudflared.yml + kustomization.yaml)
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudflared    # deploy the tunnel into its own namespace
+
+  syncPolicy:
+    automated:
+      prune: true             # remove resources deleted from git
+      selfHeal: true          # revert manual drift back to git state
+    syncOptions:
+      - CreateNamespace=true   # auto-create the cloudflared namespace
+      # The tunnel credentials Secret is created out-of-band (NOT in git).
+      # Don't let ArgoCD prune it just because it isn't tracked:
+      - RespectIgnoreDifferences=true
+  # Never prune/manage the externally-created credentials Secret.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: cloudflared-credentials
+      jsonPointers:
+        - /data

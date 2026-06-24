@@ -1,0 +1,77 @@
+
+== Deploy with ArgoCD (GitOps)
+
+The `argo` branch adds a GitOps layout so ArgoCD manages the tunnel:
+
+----
+manifests/                 # what ArgoCD syncs into the cluster
+  cloudflared.yml          # Deployment + ConfigMap
+  kustomization.yaml       # pins the cloudflared image tag
+argocd/
+  application.yaml         # the ArgoCD Application CR (points at manifests/)
+----
+
+=== Prerequisites
+
+* ArgoCD installed in the cluster (namespace `argocd`).
+* The tunnel created and the credentials Secret applied OUT OF BAND (see steps
+  1–4 above). The Secret is deliberately NOT in git — ArgoCD is told to ignore
+  it (`ignoreDifferences` on `cloudflared-credentials`) so the tunnel secret
+  never lives in the repo.
+
+=== 1. Create the tunnel + credentials Secret (one-time, not GitOps-managed)
+
+----
+cloudflared login
+cloudflared tunnel create k8s
+kubectl create namespace cloudflared
+kubectl -n cloudflared create secret generic cloudflared-credentials \
+  --from-file=credentials.json="$HOME/.cloudflared/<tunnel-id>.json"
+cloudflared tunnel route dns k8s k8s.itlinux.cc
+----
+
+=== 2. Register the Application with ArgoCD
+
+----
+kubectl apply -f argocd/application.yaml
+----
+
+Or via the CLI:
+
+----
+argocd app create cloudflared \
+  --repo https://github.com/itlinux/cloudflare-k8s.git \
+  --revision argo \
+  --path manifests \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace cloudflared \
+  --sync-policy automated --auto-prune --self-heal \
+  --sync-option CreateNamespace=true
+----
+
+=== 3. Sync + verify
+
+----
+argocd app sync cloudflared
+argocd app get cloudflared
+kubectl -n cloudflared logs -l app=cloudflared --tail=20   # "Registered tunnel connection"
+curl -I https://k8s.itlinux.cc                              # HTTP/2 200
+----
+
+=== How redeploys work
+
+With `automated` + `selfHeal` + `prune`, ArgoCD continuously reconciles the
+cluster to the `argo` branch:
+
+* Push a manifest change (e.g. bump the image tag in `manifests/kustomization.yaml`,
+  or edit the ingress hostname/service) -> ArgoCD auto-syncs it.
+* Manual `kubectl edit` drift -> ArgoCD reverts it back to git (selfHeal).
+* Resource removed from git -> ArgoCD prunes it from the cluster.
+
+The credentials Secret is exempt (ignoreDifferences) so a sync/prune never
+deletes it.
+
+=== EKS note
+
+On EKS (or any overlay CNI that reduces MTU), add `protocol: http2` to the
+ConfigMap `config.yaml` to avoid QUIC datagram flaps, then let ArgoCD sync.

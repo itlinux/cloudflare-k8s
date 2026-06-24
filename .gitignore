@@ -1,0 +1,4 @@
+*.json
+!**/kustomization*.json
+.cloudflared/
+credentials.json

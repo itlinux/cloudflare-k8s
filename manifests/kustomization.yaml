@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All cluster resources ArgoCD should sync for the cloudflared tunnel.
+# The credentials Secret is intentionally NOT here — it is created out-of-band
+# (kubectl create secret ... from the locally-generated tunnel creds) so the
+# tunnel secret never lives in git. ArgoCD syncs everything except that secret.
+resources:
+  - cloudflared.yml
+
+# Pin the connector image for reproducible syncs (override :latest in the
+# Deployment). Bump this tag deliberately rather than drifting on :latest.
+images:
+  - name: cloudflare/cloudflared
+    newTag: "2026.6.1"
