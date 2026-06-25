@@ -158,6 +158,58 @@ manually; ArgoCD manages the in-cluster connector via GitOps.</p>
 <li>A domain managed in Cloudflare (this guide uses <code>demo-argo.itlinux.cc</code>).</li>
 </ul>
 <hr />
+<h2 id="step-0-connect-to-your-eks-cluster-aws-cli-eksctl">Step 0 — Connect to your EKS cluster (AWS CLI / eksctl)</h2>
+<p>This deployment runs on <strong>Amazon EKS</strong>. Wire up cluster access first; every
+<code>kubectl</code> step below then targets the EKS cluster.</p>
+<h3 id="install-the-tooling">Install the tooling</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># macOS (Homebrew)</span>
+brew<span class="w"> </span>install<span class="w"> </span>awscli<span class="w"> </span>eksctl<span class="w"> </span>kubectl<span class="w"> </span>helm
+
+aws<span class="w"> </span>--version<span class="w">          </span><span class="c1"># aws-cli/2.x</span>
+eksctl<span class="w"> </span>version
+kubectl<span class="w"> </span>version<span class="w"> </span>--client
+</code></pre></div>
+
+<h3 id="authenticate-to-aws">Authenticate to AWS</h3>
+<div class="codehilite"><pre><span></span><code>aws<span class="w"> </span>configure<span class="w">          </span><span class="c1"># access key, secret, default region (e.g. us-west-2)</span>
+<span class="c1"># …or SSO:</span>
+aws<span class="w"> </span>sso<span class="w"> </span>login<span class="w"> </span>--profile<span class="w"> </span>&lt;your-profile&gt;
+aws<span class="w"> </span>sts<span class="w"> </span>get-caller-identity<span class="w">     </span><span class="c1"># confirm who you are</span>
+</code></pre></div>
+
+<h3 id="point-kubectl-at-the-eks-cluster">Point kubectl at the EKS cluster</h3>
+<div class="codehilite"><pre><span></span><code>aws<span class="w"> </span>eks<span class="w"> </span>list-clusters<span class="w"> </span>--region<span class="w"> </span>&lt;region&gt;
+<span class="c1"># Write/refresh the kubeconfig context for the cluster:</span>
+aws<span class="w"> </span>eks<span class="w"> </span>update-kubeconfig<span class="w"> </span>--name<span class="w"> </span>&lt;cluster-name&gt;<span class="w"> </span>--region<span class="w"> </span>&lt;region&gt;
+
+kubectl<span class="w"> </span>config<span class="w"> </span>current-context<span class="w">          </span><span class="c1"># arn:aws:eks:&lt;region&gt;:&lt;acct&gt;:cluster/&lt;name&gt;</span>
+kubectl<span class="w"> </span>get<span class="w"> </span>nodes<span class="w">                       </span><span class="c1"># confirm the cluster is reachable</span>
+</code></pre></div>
+
+<h3 id="optional-create-an-eks-cluster-with-eksctl">(Optional) Create an EKS cluster with eksctl</h3>
+<p>If you don't have one yet:</p>
+<div class="codehilite"><pre><span></span><code>eksctl<span class="w"> </span>create<span class="w"> </span>cluster<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--name<span class="w"> </span>demo-argo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--region<span class="w"> </span>&lt;region&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--nodes<span class="w"> </span><span class="m">2</span><span class="w"> </span>--node-type<span class="w"> </span>t3.medium<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--managed
+<span class="c1"># eksctl writes the kubeconfig context automatically when it finishes.</span>
+</code></pre></div>
+
+<h3 id="install-argocd-on-the-cluster-if-not-already-present">Install ArgoCD on the cluster (if not already present)</h3>
+<div class="codehilite"><pre><span></span><code>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>argocd
+kubectl<span class="w"> </span>apply<span class="w"> </span>-n<span class="w"> </span>argocd<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-f<span class="w"> </span>https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl<span class="w"> </span>-n<span class="w"> </span>argocd<span class="w"> </span>rollout<span class="w"> </span>status<span class="w"> </span>deploy/argocd-server
+</code></pre></div>
+
+<blockquote>
+<p>EKS networking note: EKS uses the AWS VPC CNI (pod IPs from the VPC, ~9001
+MTU) — <code>cloudflared</code> works fine. The ConfigMap already sets <code>protocol: http2</code>
+as a safe default; if you swap to an overlay CNI (Calico/Cilium overlay) that
+reduces MTU, keep <code>http2</code> to avoid QUIC datagram flaps.</p>
+</blockquote>
+<hr />
 <h2 id="step-1-build-the-tunnel-credentials-secret-one-time-not-gitops-managed">Step 1 — Build the tunnel + credentials Secret (one-time, NOT GitOps-managed)</h2>
 <p>The <code>demo-argo</code> tunnel is created manually. Its <code>credentials.json</code> becomes the
 <code>cloudflared-credentials</code> Secret that the Deployment mounts. The ConfigMap’s

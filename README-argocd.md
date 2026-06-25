@@ -54,6 +54,71 @@ README-argocd.md         # this document
 
 ---
 
+## Step 0 — Connect to your EKS cluster (AWS CLI / eksctl)
+
+This deployment runs on **Amazon EKS**. Wire up cluster access first; every
+`kubectl` step below then targets the EKS cluster.
+
+### Install the tooling
+
+```bash
+# macOS (Homebrew)
+brew install awscli eksctl kubectl helm
+
+aws --version          # aws-cli/2.x
+eksctl version
+kubectl version --client
+```
+
+### Authenticate to AWS
+
+```bash
+aws configure          # access key, secret, default region (e.g. us-west-2)
+# …or SSO:
+aws sso login --profile <your-profile>
+aws sts get-caller-identity     # confirm who you are
+```
+
+### Point kubectl at the EKS cluster
+
+```bash
+aws eks list-clusters --region <region>
+# Write/refresh the kubeconfig context for the cluster:
+aws eks update-kubeconfig --name <cluster-name> --region <region>
+
+kubectl config current-context          # arn:aws:eks:<region>:<acct>:cluster/<name>
+kubectl get nodes                       # confirm the cluster is reachable
+```
+
+### (Optional) Create an EKS cluster with eksctl
+
+If you don't have one yet:
+
+```bash
+eksctl create cluster \
+  --name demo-argo \
+  --region <region> \
+  --nodes 2 --node-type t3.medium \
+  --managed
+# eksctl writes the kubeconfig context automatically when it finishes.
+```
+
+### Install ArgoCD on the cluster (if not already present)
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server
+```
+
+> EKS networking note: EKS uses the AWS VPC CNI (pod IPs from the VPC, ~9001
+> MTU) — `cloudflared` works fine. The ConfigMap already sets `protocol: http2`
+> as a safe default; if you swap to an overlay CNI (Calico/Cilium overlay) that
+> reduces MTU, keep `http2` to avoid QUIC datagram flaps.
+
+---
+
 ## Step 1 — Build the tunnel + credentials Secret (one-time, NOT GitOps-managed)
 
 The `demo-argo` tunnel is created manually. Its `credentials.json` becomes the
