@@ -161,6 +161,22 @@ manually; ArgoCD manages the in-cluster connector via GitOps.</p>
 <p>The <code>demo-argo</code> tunnel is created manually. Its <code>credentials.json</code> becomes the
 <code>cloudflared-credentials</code> Secret that the Deployment mounts. The ConfigMap’s
 <code>tunnel: demo-argo</code> must match this tunnel.</p>
+<h3 id="where-does-cloudflared-run-to-create-the-tunnel">Where does <code>cloudflared</code> run to <em>create</em> the tunnel?</h3>
+<p>Creating the tunnel and running the connector are <strong>two separate things</strong>:</p>
+<ul>
+<li><strong>Creating the tunnel</strong> is a one-time admin action. You run the <code>cloudflared</code>
+  CLI <strong>wherever you have it</strong> — your <strong>laptop/workstation</strong> is fine. It does
+  <strong>not</strong> have to run on the cluster or a server. The CLI just registers the
+  tunnel with Cloudflare and writes the <code>credentials.json</code> locally.</li>
+<li><strong>Running the connector</strong> is what actually serves traffic — that’s the
+  <code>cloudflared</code> <strong>pods in Kubernetes</strong> (managed by ArgoCD). They consume the
+  credentials you generated.</li>
+</ul>
+<p>So: create on your laptop → load the creds into the cluster → ArgoCD runs the
+connector. You can even create the tunnel on one machine and never run a
+connector there at all.</p>
+<h3 id="two-ways-to-create-the-tunnel">Two ways to create the tunnel</h3>
+<p><strong>Option 1 — CLI (from your laptop):</strong></p>
 <div class="codehilite"><pre><span></span><code>cloudflared<span class="w"> </span>login<span class="w">                      </span><span class="c1"># browser auth — pick the itlinux.cc zone</span>
 cloudflared<span class="w"> </span>tunnel<span class="w"> </span>create<span class="w"> </span>demo-argo<span class="w">    </span><span class="c1"># writes ~/.cloudflared/&lt;TUNNEL-ID&gt;.json</span>
 
@@ -176,9 +192,29 @@ kubectl<span class="w"> </span>-n<span class="w"> </span>cloudflared<span class=
 cloudflared<span class="w"> </span>tunnel<span class="w"> </span>route<span class="w"> </span>dns<span class="w"> </span>demo-argo<span class="w"> </span>demo-argo.itlinux.cc
 </code></pre></div>
 
+<p><strong>Option 2 — Dashboard (no CLI needed):</strong></p>
+<p>Zero Trust → <strong>Networks → Tunnels → Create a tunnel</strong> → <strong>Cloudflared</strong> →
+name it <code>demo-argo</code>. The dashboard shows an install/run command containing a
+<strong>tunnel token</strong> — for a dashboard-created (“remotely-managed”) tunnel you use
+that <strong>token</strong> instead of a <code>credentials.json</code> file:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Dashboard-managed tunnel: store the token as the Secret instead of creds file</span>
+kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>cloudflared
+kubectl<span class="w"> </span>-n<span class="w"> </span>cloudflared<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>cloudflared-credentials<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">token</span><span class="o">=</span><span class="s1">&#39;&lt;TUNNEL-TOKEN-from-dashboard&gt;&#39;</span>
+</code></pre></div>
+
+<p>Then run the connector with <code>tunnel run --token</code> instead of a config file. If you
+go this route, change the Deployment args to:
+<code>["tunnel", "run", "--token", "$(TUNNEL_TOKEN)"]</code> and inject the token via an
+env var from the Secret. Public hostnames + routes are configured in the
+dashboard’s tunnel UI rather than the ConfigMap <code>ingress:</code> block.</p>
 <blockquote>
-<p><strong>Never commit <code>credentials.json</code>.</strong> It is the tunnel secret. ArgoCD is
-configured to ignore this Secret so a sync/prune never deletes or manages it.</p>
+<p>This README’s manifests use the <strong>CLI / credentials-file</strong> model (Option 1),
+which keeps the routing config in git (the ConfigMap <code>ingress:</code>). The dashboard
+token model moves routing into the Cloudflare UI — pick one, don’t mix.</p>
+<p><strong>Never commit <code>credentials.json</code> or the tunnel token.</strong> They are the tunnel
+secret. ArgoCD is configured to ignore this Secret so a sync/prune never
+deletes or manages it.</p>
 </blockquote>
 <hr />
 <h2 id="step-2-the-kubernetes-manifest-manifestscloudflaredyml">Step 2 — The Kubernetes manifest (<code>manifests/cloudflared.yml</code>)</h2>
