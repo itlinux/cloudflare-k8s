@@ -2,11 +2,13 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cloudflared
+  labels:
+    app: cloudflared
 spec:
   selector:
     matchLabels:
       app: cloudflared
-  replicas: 1
+  replicas: 2                       # HA: 2 connectors share the same tunnel
   template:
     metadata:
       labels:
@@ -14,7 +16,7 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
+          image: cloudflare/cloudflared:latest   # tag pinned via kustomization.yaml
           args:
             - tunnel
             - --config
@@ -27,6 +29,13 @@ spec:
             failureThreshold: 1
             initialDelaySeconds: 10
             periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
           volumeMounts:
             - name: config
               mountPath: /etc/cloudflared
@@ -51,11 +60,19 @@ metadata:
   name: cloudflared
 data:
   config.yaml: |
-    tunnel:  k8s
+    # Manually-built tunnel named "demo-argo".
+    # The credentials.json for THIS tunnel is loaded as the cloudflared-credentials
+    # Secret (created out-of-band, never in git). Tunnel name must match the creds.
+    tunnel: demo-argo
+    # EKS / overlay-CNI safety: force HTTP/2 so QUIC datagrams don't flap on a
+    # reduced-MTU CNI. Drop this line if you're on a 1500+ MTU dataplane.
+    protocol: http2
     metrics: 0.0.0.0:2000
     no-autoupdate: true
     credentials-file: /etc/cloudflared/creds/credentials.json
     ingress:
-    - hostname: "front.remomattei.com"
+    # Edit hostname/service to your real app. Hostname must have a DNS route
+    # (cloudflared tunnel route dns demo-argo <hostname>) pointing at this tunnel.
+    - hostname: "demo-argo.itlinux.cc"
       service: http://front.default.svc.cluster.local:80
     - service: http_status:404

@@ -21,13 +21,18 @@ argocd/
 
 === 1. Create the tunnel + credentials Secret (one-time, not GitOps-managed)
 
+The tunnel `demo-argo` is built manually; its credentials.json becomes the
+`cloudflared-credentials` Secret (the manifest's ConfigMap sets `tunnel: demo-argo`).
+
 ----
 cloudflared login
-cloudflared tunnel create k8s
+cloudflared tunnel create demo-argo
 kubectl create namespace cloudflared
+TID=$(cloudflared tunnel list --output json \
+  | python3 -c "import sys,json;print([t['id'] for t in json.load(sys.stdin) if t['name']=='demo-argo'][0])")
 kubectl -n cloudflared create secret generic cloudflared-credentials \
-  --from-file=credentials.json="$HOME/.cloudflared/<tunnel-id>.json"
-cloudflared tunnel route dns k8s k8s.itlinux.cc
+  --from-file=credentials.json="$HOME/.cloudflared/${TID}.json"
+cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc
 ----
 
 === 2. Register the Application with ArgoCD
