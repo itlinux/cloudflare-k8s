@@ -290,12 +290,29 @@ spec:
 
 ---
 
-## Step 4 — Register the app (GitOps, no ArgoCD CLI)
+## Step 4 — Register the app with ArgoCD
 
-You do **not** need the `argocd` CLI. There are two pure-GitOps ways to register
-the Application so ArgoCD pulls the repo and reconciles automatically.
+Register the Application so ArgoCD pulls the repo and reconciles automatically.
+Use whichever fits your workflow — the ArgoCD **CLI**, a declarative **kubectl
+apply**, or the **App-of-Apps** root for hands-off CI/CD.
 
-### 4a. One-time bootstrap (kubectl apply the Application CR)
+### 4a. ArgoCD CLI
+
+```bash
+argocd login <argocd-server>
+argocd app create cloudflared \
+  --repo https://github.com/itlinux/cloudflare-k8s.git \
+  --revision argo \
+  --path manifests \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace cloudflared \
+  --sync-policy automated --auto-prune --self-heal \
+  --sync-option CreateNamespace=true
+argocd app sync cloudflared
+argocd app get cloudflared
+```
+
+### 4b. Declarative (kubectl apply the Application CR)
 
 A single declarative apply — after this, everything is git-driven:
 
@@ -304,17 +321,14 @@ kubectl apply -f argocd/application.yaml
 ```
 
 That CR points at the `argo` branch / `manifests` path with `automated` sync, so
-ArgoCD immediately pulls and deploys, then keeps reconciling on every push. No
-CLI, no manual sync. This one apply is the only imperative step — and even it can
-be eliminated with App-of-Apps below.
+ArgoCD immediately pulls and deploys, then keeps reconciling on every push.
 
-### 4b. App-of-Apps — zero per-app registration (recommended for CI/CD)
+### 4c. App-of-Apps — zero per-app registration (recommended for CI/CD)
 
 Point ArgoCD at a **single root Application** once; from then on you add new
-apps just by committing YAML — ArgoCD discovers and deploys them. Nothing
-imperative per app, ever.
+apps just by committing YAML — ArgoCD discovers and deploys them.
 
-`argocd/root-app.yaml` (the only thing you ever register):
+`argocd/root-app.yaml` (the only thing you register):
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -335,14 +349,27 @@ spec:
     automated: { prune: true, selfHeal: true }
 ```
 
+Register it once (CLI or kubectl):
+
+```bash
+kubectl apply -f argocd/root-app.yaml
+# …or: argocd app create root --repo ... --path argocd --revision argo ...
+```
+
 Because `argocd/application.yaml` (the cloudflared app) lives in that `argocd/`
 dir, the root app picks it up automatically. To add another service later, drop
 a new `argocd/<name>.yaml` and push — ArgoCD deploys it with no extra commands.
 
-### 4c. Connect the repo to ArgoCD (declarative, for private repos)
+### 4d. Connect the repo to ArgoCD (private repos)
 
-If the repo is private, register the credentials as a Secret (also GitOps-able)
-rather than `argocd repo add`:
+If the repo is private, register the credentials. Via CLI:
+
+```bash
+argocd repo add https://github.com/itlinux/cloudflare-k8s.git \
+  --username git --password <github-pat>
+```
+
+…or declaratively as a Secret (GitOps-able):
 
 ```yaml
 apiVersion: v1
@@ -361,18 +388,20 @@ stringData:
 
 Public repo? Skip this — ArgoCD pulls anonymously.
 
-### Verify (kubectl only, no argocd CLI)
+### Verify
 
 ```bash
+argocd app get cloudflared                                  # Synced / Healthy
+# …or with kubectl:
 kubectl -n argocd get applications                          # SYNCED / HEALTHY
 kubectl -n cloudflared get pods                             # cloudflared running
 kubectl -n cloudflared logs -l app=cloudflared --tail=20    # "Registered tunnel connection"
 curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
 ```
 
-> **The whole point:** after the one-time bootstrap, *adding the repo = ArgoCD
-> pulls it and does the magic.* A push to the `argo` branch is the only action
-> needed to deploy or change anything — your CI/CD never calls the ArgoCD CLI.
+> **Redeploys are git-driven:** after the one-time registration, a push to the
+> `argo` branch is all that's needed — ArgoCD pulls and reconciles. You can still
+> use the CLI (`argocd app sync`) anytime for a manual sync or to inspect state.
 
 ---
 

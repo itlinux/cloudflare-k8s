@@ -363,23 +363,35 @@ deletes or manages it.</p>
 </code></pre></div>
 
 <hr />
-<h2 id="step-4-register-the-app-gitops-no-argocd-cli">Step 4 — Register the app (GitOps, no ArgoCD CLI)</h2>
-<p>You do <strong>not</strong> need the <code>argocd</code> CLI. There are two pure-GitOps ways to register
-the Application so ArgoCD pulls the repo and reconciles automatically.</p>
-<h3 id="4a-one-time-bootstrap-kubectl-apply-the-application-cr">4a. One-time bootstrap (kubectl apply the Application CR)</h3>
+<h2 id="step-4-register-the-app-with-argocd">Step 4 — Register the app with ArgoCD</h2>
+<p>Register the Application so ArgoCD pulls the repo and reconciles automatically.
+Use whichever fits your workflow — the ArgoCD <strong>CLI</strong>, a declarative <strong>kubectl
+apply</strong>, or the <strong>App-of-Apps</strong> root for hands-off CI/CD.</p>
+<h3 id="4a-argocd-cli">4a. ArgoCD CLI</h3>
+<div class="codehilite"><pre><span></span><code>argocd<span class="w"> </span>login<span class="w"> </span>&lt;argocd-server&gt;
+argocd<span class="w"> </span>app<span class="w"> </span>create<span class="w"> </span>cloudflared<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--repo<span class="w"> </span>https://github.com/itlinux/cloudflare-k8s.git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--revision<span class="w"> </span>argo<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--path<span class="w"> </span>manifests<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dest-server<span class="w"> </span>https://kubernetes.default.svc<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--dest-namespace<span class="w"> </span>cloudflared<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--sync-policy<span class="w"> </span>automated<span class="w"> </span>--auto-prune<span class="w"> </span>--self-heal<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--sync-option<span class="w"> </span><span class="nv">CreateNamespace</span><span class="o">=</span><span class="nb">true</span>
+argocd<span class="w"> </span>app<span class="w"> </span>sync<span class="w"> </span>cloudflared
+argocd<span class="w"> </span>app<span class="w"> </span>get<span class="w"> </span>cloudflared
+</code></pre></div>
+
+<h3 id="4b-declarative-kubectl-apply-the-application-cr">4b. Declarative (kubectl apply the Application CR)</h3>
 <p>A single declarative apply — after this, everything is git-driven:</p>
 <div class="codehilite"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>argocd/application.yaml
 </code></pre></div>
 
 <p>That CR points at the <code>argo</code> branch / <code>manifests</code> path with <code>automated</code> sync, so
-ArgoCD immediately pulls and deploys, then keeps reconciling on every push. No
-CLI, no manual sync. This one apply is the only imperative step — and even it can
-be eliminated with App-of-Apps below.</p>
-<h3 id="4b-app-of-apps-zero-per-app-registration-recommended-for-cicd">4b. App-of-Apps — zero per-app registration (recommended for CI/CD)</h3>
+ArgoCD immediately pulls and deploys, then keeps reconciling on every push.</p>
+<h3 id="4c-app-of-apps-zero-per-app-registration-recommended-for-cicd">4c. App-of-Apps — zero per-app registration (recommended for CI/CD)</h3>
 <p>Point ArgoCD at a <strong>single root Application</strong> once; from then on you add new
-apps just by committing YAML — ArgoCD discovers and deploys them. Nothing
-imperative per app, ever.</p>
-<p><code>argocd/root-app.yaml</code> (the only thing you ever register):</p>
+apps just by committing YAML — ArgoCD discovers and deploys them.</p>
+<p><code>argocd/root-app.yaml</code> (the only thing you register):</p>
 <div class="codehilite"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">argoproj.io/v1alpha1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Application</span>
 <span class="nt">metadata</span><span class="p">:</span>
@@ -398,12 +410,21 @@ imperative per app, ever.</p>
 <span class="w">    </span><span class="nt">automated</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> prune</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="p p-Indicator">,</span><span class="nt"> selfHeal</span><span class="p">:</span><span class="w"> </span><span class="nv">true</span><span class="w"> </span><span class="p p-Indicator">}</span>
 </code></pre></div>
 
+<p>Register it once (CLI or kubectl):</p>
+<div class="codehilite"><pre><span></span><code>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>argocd/root-app.yaml
+<span class="c1"># …or: argocd app create root --repo ... --path argocd --revision argo ...</span>
+</code></pre></div>
+
 <p>Because <code>argocd/application.yaml</code> (the cloudflared app) lives in that <code>argocd/</code>
 dir, the root app picks it up automatically. To add another service later, drop
 a new <code>argocd/&lt;name&gt;.yaml</code> and push — ArgoCD deploys it with no extra commands.</p>
-<h3 id="4c-connect-the-repo-to-argocd-declarative-for-private-repos">4c. Connect the repo to ArgoCD (declarative, for private repos)</h3>
-<p>If the repo is private, register the credentials as a Secret (also GitOps-able)
-rather than <code>argocd repo add</code>:</p>
+<h3 id="4d-connect-the-repo-to-argocd-private-repos">4d. Connect the repo to ArgoCD (private repos)</h3>
+<p>If the repo is private, register the credentials. Via CLI:</p>
+<div class="codehilite"><pre><span></span><code>argocd<span class="w"> </span>repo<span class="w"> </span>add<span class="w"> </span>https://github.com/itlinux/cloudflare-k8s.git<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--username<span class="w"> </span>git<span class="w"> </span>--password<span class="w"> </span>&lt;github-pat&gt;
+</code></pre></div>
+
+<p>…or declaratively as a Secret (GitOps-able):</p>
 <div class="codehilite"><pre><span></span><code><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v1</span>
 <span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Secret</span>
 <span class="nt">metadata</span><span class="p">:</span>
@@ -419,17 +440,19 @@ rather than <code>argocd repo add</code>:</p>
 </code></pre></div>
 
 <p>Public repo? Skip this — ArgoCD pulls anonymously.</p>
-<h3 id="verify-kubectl-only-no-argocd-cli">Verify (kubectl only, no argocd CLI)</h3>
-<div class="codehilite"><pre><span></span><code>kubectl<span class="w"> </span>-n<span class="w"> </span>argocd<span class="w"> </span>get<span class="w"> </span>applications<span class="w">                          </span><span class="c1"># SYNCED / HEALTHY</span>
+<h3 id="verify">Verify</h3>
+<div class="codehilite"><pre><span></span><code>argocd<span class="w"> </span>app<span class="w"> </span>get<span class="w"> </span>cloudflared<span class="w">                                  </span><span class="c1"># Synced / Healthy</span>
+<span class="c1"># …or with kubectl:</span>
+kubectl<span class="w"> </span>-n<span class="w"> </span>argocd<span class="w"> </span>get<span class="w"> </span>applications<span class="w">                          </span><span class="c1"># SYNCED / HEALTHY</span>
 kubectl<span class="w"> </span>-n<span class="w"> </span>cloudflared<span class="w"> </span>get<span class="w"> </span>pods<span class="w">                             </span><span class="c1"># cloudflared running</span>
 kubectl<span class="w"> </span>-n<span class="w"> </span>cloudflared<span class="w"> </span>logs<span class="w"> </span>-l<span class="w"> </span><span class="nv">app</span><span class="o">=</span>cloudflared<span class="w"> </span>--tail<span class="o">=</span><span class="m">20</span><span class="w">    </span><span class="c1"># &quot;Registered tunnel connection&quot;</span>
 curl<span class="w"> </span>-I<span class="w"> </span>https://demo-argo.itlinux.cc<span class="w">                        </span><span class="c1"># HTTP/2 200</span>
 </code></pre></div>
 
 <blockquote>
-<p><strong>The whole point:</strong> after the one-time bootstrap, <em>adding the repo = ArgoCD
-pulls it and does the magic.</em> A push to the <code>argo</code> branch is the only action
-needed to deploy or change anything — your CI/CD never calls the ArgoCD CLI.</p>
+<p><strong>Redeploys are git-driven:</strong> after the one-time registration, a push to the
+<code>argo</code> branch is all that's needed — ArgoCD pulls and reconciles. You can still
+use the CLI (<code>argocd app sync</code>) anytime for a manual sync or to inspect state.</p>
 </blockquote>
 <hr />
 <h2 id="dns-routing-access-who-can-reach-the-hostname">DNS routing + Access (who can reach the hostname)</h2>
