@@ -208,6 +208,80 @@ curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
 
 ---
 
+## DNS routing + Access (who can reach the hostname)
+
+### How DNS works with the tunnel
+
+The public hostname must resolve to **the tunnel**, not to any server IP. `cloudflared tunnel route dns` creates a **proxied CNAME** in Cloudflare DNS:
+
+```
+demo-argo.itlinux.cc  CNAME  <tunnel-id>.cfargotunnel.com   (proxied / orange-cloud)
+```
+
+```bash
+cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc
+dig +short demo-argo.itlinux.cc       # returns Cloudflare proxy IPs, NOT the cfargotunnel target
+```
+
+- The hostname here **must match** the `ingress:` hostname in the ConfigMap.
+- The record is **proxied** (orange cloud) — that's what routes eyeball traffic through Cloudflare into the tunnel. A grey-cloud/DNS-only record will NOT work.
+- One tunnel can serve many hostnames — add more `ingress:` entries and a `route dns` per hostname.
+
+### Option A — Open to everyone (public service)
+
+Just the tunnel + DNS above. Anyone on the internet can reach
+`https://demo-argo.itlinux.cc`; the connector proxies to the in-cluster Service.
+Use for public sites/APIs. No identity check.
+
+### Option B — Gated by Cloudflare Access (authenticated users only)
+
+Put **Zero Trust Access** in front of the same hostname so only authorized
+identities (Entra/Okta/One-time PIN, etc.) can reach it. The tunnel/DNS/ArgoCD
+setup is unchanged — Access is a policy layer on the hostname.
+
+Dashboard: **Zero Trust → Access → Applications → Add → Self-hosted**
+- **Application domain:** `demo-argo.itlinux.cc`
+- **Identity providers:** select your IdP(s) (e.g. Entra) and/or One-time PIN
+- **Policy:** Allow → Include → emails / email-domain / IdP groups
+- Save. Now hitting the hostname shows the Access login page first; only
+  users who pass the policy reach the cloudflared origin.
+
+Terraform equivalent (self-hosted Access app + policy):
+
+```hcl
+resource "cloudflare_zero_trust_access_application" "demo_argo" {
+  account_id       = var.cloudflare_account_id
+  name             = "Demo Argo (k8s)"
+  domain           = "demo-argo.itlinux.cc"
+  session_duration = "1h"
+  # Show the login picker (SSO + One-time PIN); no auto-redirect.
+  allowed_idps              = compact([var.entra_idp_id, var.otp_idp_id])
+  auto_redirect_to_identity = false
+}
+
+resource "cloudflare_zero_trust_access_policy" "demo_argo_allow" {
+  application_id = cloudflare_zero_trust_access_application.demo_argo.id
+  account_id     = var.cloudflare_account_id
+  name           = "Allow team"
+  decision       = "allow"
+  precedence     = 1
+  include = [{ email_domain = { domain = "itlinux.cc" } }]
+}
+```
+
+| | Open (Option A) | Access-gated (Option B) |
+|---|---|---|
+| Who reaches it | anyone | only identities passing the policy |
+| Login screen | none | Cloudflare Access (SSO / PIN) |
+| Extra setup | tunnel + DNS only | + Access application & policy |
+| Tunnel/ArgoCD config | same | same (Access is hostname-layer) |
+
+> Access protects the **hostname at the edge** — it does not change the tunnel,
+> the ConfigMap, or the ArgoCD sync. You can flip a hostname between open and
+> gated without touching the cluster.
+
+---
+
 ## How redeploys work (GitOps)
 
 With `automated` + `selfHeal` + `prune`, ArgoCD continuously reconciles the
