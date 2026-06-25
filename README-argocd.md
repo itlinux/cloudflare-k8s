@@ -530,6 +530,47 @@ This replaces the manual `cloudflared tunnel route dns` (DNS) and the dashboard
 Access steps with `terraform apply`, while leaving tunnel creation + the k8s
 connector (ArgoCD) exactly as documented above.
 
+### Credentials — API token + account ID
+
+Terraform needs two secrets in `terraform.tfvars`: a **scoped API token** and
+your **account ID** (plus the **zone ID** of your domain). Here's how to get each:
+
+![How to generate a Cloudflare API token and find the account ID](docs/api-token.png)
+
+**1–3. Create the API token** — dash → avatar (top-right) → **My Profile → API
+Tokens → Create Token → Custom token**. Grant least-privilege permissions:
+
+| Type | Permission | Why |
+|------|-----------|-----|
+| **Zone** | DNS · **Edit** | create the proxied CNAME (`dns.tf`) |
+| **Account** | Access: Apps and Policies · **Edit** | create the Access app + policy (`access.tf`) |
+| **Account** | Access: Organizations, IdPs, and Groups · **Edit** | reference IdPs/groups in the policy |
+
+Under **Account Resources** include your account, under **Zone Resources**
+include the domain's zone. Continue → **Create Token** → **copy the value now**
+(it's shown only once). If you only need DNS (open hostname, `access_enabled =
+false`), the single Zone · DNS · Edit permission is enough.
+
+**4. Account ID** — dash → select any domain → **Overview** → right-hand **API**
+panel shows **Account ID** (and Zone ID). Or **Manage Account → copy Account ID**.
+
+**5. Zone ID** — same Overview → API panel → **Zone ID** (specific to the domain).
+
+**Wire them in:**
+
+```hcl
+# terraform/terraform.tfvars   (gitignored — never commit)
+cloudflare_api_token  = "<token-from-step-3>"
+cloudflare_account_id = "<account-id-from-step-4>"
+zone_id               = "<zone-id-from-step-5>"
+tunnel_id             = "<cloudflared tunnel list>"
+```
+
+> **Token hygiene:** store it only in `terraform.tfvars` (gitignored) or a secrets
+> manager / `TF_VAR_cloudflare_api_token` env var — never in committed files.
+> Scope it to the one account + zone, and rotate it from the same API Tokens page
+> if it's ever exposed (Roll → invalidates the old value).
+
 ---
 
 ## How redeploys work (GitOps)

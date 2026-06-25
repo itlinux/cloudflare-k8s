@@ -1,0 +1,43 @@
+flowchart TB
+    subgraph STEP1["1 — Open API Tokens"]
+        direction TB
+        DASH["dash.cloudflare.com"]:::cf
+        PROFILE["My Profile<br/>(top-right avatar)"]:::cf
+        TOKENS["API Tokens<br/>→ Create Token"]:::cf
+    end
+
+    subgraph STEP2["2 — Scope the token (least privilege)"]
+        direction TB
+        TMPL["Custom token"]:::dev
+        P1["Zone · DNS · Edit<br/>(create the CNAME)"]:::perm
+        P2["Account · Access: Apps and Policies · Edit"]:::perm
+        P3["Account · Access: Orgs, IdPs, Groups · Edit"]:::perm
+        SCOPE["Account & Zone Resources<br/>Include → your account / zone"]:::dev
+    end
+
+    subgraph STEP3["3 — Create + copy"]
+        direction TB
+        CREATE["Continue → Create Token"]:::dev
+        TOKEN["Token value<br/>(shown ONCE — copy now)"]:::secret
+    end
+
+    subgraph STEP4["4 — Get the Account ID"]
+        direction TB
+        ACCT["dash → any domain →<br/>Overview → API section<br/>(or Manage Account → copy Account ID)"]:::cf
+    end
+
+    subgraph USE["5 — Wire into Terraform"]
+        direction TB
+        TFVARS["terraform.tfvars (gitignored)<br/>cloudflare_api_token = ...<br/>cloudflare_account_id = ...<br/>zone_id = ..."]:::tf
+    end
+
+    DASH --> PROFILE --> TOKENS --> TMPL
+    TMPL --> P1 --> P2 --> P3 --> SCOPE --> CREATE --> TOKEN
+    TOKEN -->|"paste"| TFVARS
+    ACCT -->|"paste"| TFVARS
+
+    classDef cf fill:#3a1d0a,stroke:#f6821f,stroke-width:2px,color:#fdba74,rx:8,ry:8;
+    classDef dev fill:#111827,stroke:#64748b,stroke-width:1.5px,color:#cbd5e1,rx:8,ry:8;
+    classDef perm fill:#1e293b,stroke:#fb923c,stroke-width:1.5px,color:#e2e8f0,rx:8,ry:8;
+    classDef secret fill:#3f1d1d,stroke:#f87171,stroke-width:2px,color:#fecaca,rx:8,ry:8;
+    classDef tf fill:#1e293b,stroke:#a78bfa,stroke-width:2px,color:#ddd6fe,rx:8,ry:8;
