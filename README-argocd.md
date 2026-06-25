@@ -5,6 +5,12 @@ with **ArgoCD**, so Services are reachable on a public hostname **without
 exposing any public IP / LoadBalancer**. The tunnel (`demo-argo`) is built
 manually; ArgoCD manages the in-cluster connector via GitOps.
 
+> **NOTE — branch model:** this GitOps setup lives on its own **`argo`** branch
+> and is **not merged into `main`**. `main` stays the upstream's original; `argo`
+> is the deployable branch. ArgoCD tracks `targetRevision: argo`, so it pulls
+> directly from this branch — the two branches are intentionally kept separate
+> (no PR/merge into `main`).
+
 ---
 
 ## Architecture

@@ -116,6 +116,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 with <strong>ArgoCD</strong>, so Services are reachable on a public hostname <strong>without
 exposing any public IP / LoadBalancer</strong>. The tunnel (<code>demo-argo</code>) is built
 manually; ArgoCD manages the in-cluster connector via GitOps.</p>
+<blockquote>
+<p><strong>NOTE — branch model:</strong> this GitOps setup lives on its own <strong><code>argo</code></strong> branch
+and is <strong>not merged into <code>main</code></strong>. <code>main</code> stays the upstream's original; <code>argo</code>
+is the deployable branch. ArgoCD tracks <code>targetRevision: argo</code>, so it pulls
+directly from this branch — the two branches are intentionally kept separate
+(no PR/merge into <code>main</code>).</p>
+</blockquote>
 <hr />
 <h2 id="architecture">Architecture</h2>
 <div class="codehilite"><pre><span></span><code> Internet ──▶ Cloudflare edge ──▶ demo-argo tunnel ──▶ cloudflared pods ──▶ Service
