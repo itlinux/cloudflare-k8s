@@ -1,0 +1,45 @@
+flowchart TB
+    subgraph GIT["Git (GitOps source of truth)"]
+        direction TB
+        REPO["itlinux/cloudflare-k8s<br/>branch: argo<br/>manifests/ + argocd/"]:::git
+    end
+
+    subgraph DEV["Operator (one-time, out-of-band)"]
+        direction TB
+        CLI["cloudflared CLI<br/>tunnel create demo-argo"]:::dev
+        SEC["kubectl create secret<br/>cloudflared-credentials"]:::dev
+        DNS["tunnel route dns<br/>demo-argo.itlinux.cc"]:::dev
+    end
+
+    subgraph CF["Cloudflare edge"]
+        direction TB
+        EDGE["Cloudflare network<br/>demo-argo tunnel"]:::cf
+    end
+
+    subgraph K8S["Kubernetes cluster (no public IP)"]
+        direction TB
+        ARGO["ArgoCD<br/>auto-sync / selfHeal / prune"]:::argo
+        CFD["cloudflared pods x2<br/>ns: cloudflared"]:::pod
+        SVC["front Service<br/>:80"]:::svc
+    end
+
+    USER(["User browser<br/>https://demo-argo.itlinux.cc"]):::user
+
+    REPO -->|"watches argo branch"| ARGO
+    ARGO -->|"applies manifests"| CFD
+    SEC -.->|"mounted creds"| CFD
+    CLI -.-> SEC
+    CLI -.-> DNS
+    DNS -.->|"CNAME -> cfargotunnel"| EDGE
+    CFD ==>|"outbound-only<br/>HTTP/2 tunnel"| EDGE
+    USER -->|"HTTPS"| EDGE
+    EDGE ==>|"demo-argo"| CFD
+    CFD -->|"proxy to origin"| SVC
+
+    classDef git fill:#1e293b,stroke:#f6821f,stroke-width:2px,color:#e2e8f0,rx:8,ry:8;
+    classDef dev fill:#111827,stroke:#64748b,stroke-width:1.5px,color:#cbd5e1,rx:8,ry:8;
+    classDef cf fill:#3a1d0a,stroke:#f6821f,stroke-width:2px,color:#fdba74,rx:8,ry:8;
+    classDef argo fill:#1e293b,stroke:#fb923c,stroke-width:2px,color:#e2e8f0,rx:8,ry:8;
+    classDef pod fill:#161b22,stroke:#f6821f,stroke-width:2px,color:#e2e8f0,rx:8,ry:8;
+    classDef svc fill:#111827,stroke:#60a5fa,stroke-width:1.5px,color:#cbd5e1,rx:8,ry:8;
+    classDef user fill:#0f172a,stroke:#fb923c,stroke-width:2px,color:#fdba74;

@@ -14,6 +14,16 @@ manually; ArgoCD manages the in-cluster connector via GitOps.
    (DNS: demo-argo.itlinux.cc)        (outbound-only)     (in cluster)      (front:80)
 ```
 
+![Architecture: ArgoCD GitOps + demo-argo tunnel flow](docs/architecture.png)
+
+**Flow, end to end:**
+
+1. **GitOps source** — the `argo` branch holds `manifests/` (cloudflared Deployment + ConfigMap) and `argocd/` (the Application CR).
+2. **ArgoCD** watches the `argo` branch and applies the manifests into the `cloudflared` namespace (auto-sync, selfHeal, prune).
+3. **Operator (one-time, out-of-band)** — builds the `demo-argo` tunnel with the `cloudflared` CLI, loads its `credentials.json` as a Secret, and creates the DNS route. None of this is in git.
+4. **cloudflared pods** mount the creds Secret and open an **outbound-only HTTP/2 tunnel** to the Cloudflare edge — no inbound ports, no public IP.
+5. **User traffic** hits `https://demo-argo.itlinux.cc` → Cloudflare edge → the `demo-argo` tunnel → a cloudflared pod → the in-cluster `front` Service.
+
 - **No inbound exposure** — `cloudflared` dials *out* to Cloudflare; nothing is opened on the cluster.
 - **ArgoCD** continuously reconciles the connector Deployment/ConfigMap to the `argo` branch.
 - **Tunnel credentials** live in a Kubernetes Secret created **out-of-band** — never in git.

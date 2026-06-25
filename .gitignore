@@ -1,4 +1,5 @@
 *.json
 !**/kustomization*.json
+!docs/theme.json
 .cloudflared/
 credentials.json
