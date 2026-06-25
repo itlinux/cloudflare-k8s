@@ -456,6 +456,21 @@ use the CLI (<code>argocd app sync</code>) anytime for a manual sync or to inspe
 </blockquote>
 <hr />
 <h2 id="dns-routing-access-who-can-reach-the-hostname">DNS routing + Access (who can reach the hostname)</h2>
+<h3 id="prerequisite-the-domain-must-be-onboarded-in-cloudflare">Prerequisite: the domain must be onboarded in Cloudflare</h3>
+<p>DNS routing only works if the hostname's <strong>domain is already a zone in your
+Cloudflare account</strong> (e.g. <code>itlinux.cc</code>), with its nameservers pointing at
+Cloudflare and the zone <strong>Active</strong>.</p>
+<ul>
+<li>Add the site: dash → <strong>Add a site</strong> → enter the domain → pick a plan →
+  Cloudflare gives you two nameservers.</li>
+<li>Update the nameservers at your registrar to those Cloudflare NS records.</li>
+<li>Wait for the zone status to show <strong>Active</strong> (<code>dig NS itlinux.cc</code> returns the
+  Cloudflare nameservers).</li>
+<li>If you use <strong>Cloudflare Registrar</strong>, the domain is already onboarded.</li>
+</ul>
+<p>Without an Active zone, <code>cloudflared tunnel route dns</code> (and the Terraform
+<code>cloudflare_dns_record</code>) have nowhere to create the record and will fail. The
+<code>zone_id</code> used by the Terraform module is this onboarded zone's ID.</p>
 <h3 id="how-dns-works-with-the-tunnel">How DNS works with the tunnel</h3>
 <p>The public hostname must resolve to <strong>the tunnel</strong>, not to any server IP. <code>cloudflared tunnel route dns</code> creates a <strong>proxied CNAME</strong> in Cloudflare DNS:</p>
 <div class="codehilite"><pre><span></span><code>demo-argo.itlinux.cc  CNAME  &lt;tunnel-id&gt;.cfargotunnel.com   (proxied / orange-cloud)

@@ -407,6 +407,23 @@ curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
 
 ## DNS routing + Access (who can reach the hostname)
 
+### Prerequisite: the domain must be onboarded in Cloudflare
+
+DNS routing only works if the hostname's **domain is already a zone in your
+Cloudflare account** (e.g. `itlinux.cc`), with its nameservers pointing at
+Cloudflare and the zone **Active**.
+
+- Add the site: dash → **Add a site** → enter the domain → pick a plan →
+  Cloudflare gives you two nameservers.
+- Update the nameservers at your registrar to those Cloudflare NS records.
+- Wait for the zone status to show **Active** (`dig NS itlinux.cc` returns the
+  Cloudflare nameservers).
+- If you use **Cloudflare Registrar**, the domain is already onboarded.
+
+Without an Active zone, `cloudflared tunnel route dns` (and the Terraform
+`cloudflare_dns_record`) have nowhere to create the record and will fail. The
+`zone_id` used by the Terraform module is this onboarded zone's ID.
+
 ### How DNS works with the tunnel
 
 The public hostname must resolve to **the tunnel**, not to any server IP. `cloudflared tunnel route dns` creates a **proxied CNAME** in Cloudflare DNS:
