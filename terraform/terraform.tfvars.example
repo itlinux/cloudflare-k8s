@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and fill with LITERAL values. terraform.tfvars is
+# gitignored. Only per-deploy values live here; defaulted vars stay in variables.tf.
+#
+# Token scopes: Zone > DNS > Edit (for the CNAME) + Access: Apps and Policies > Edit
+# and Access: Organizations, IdPs, and Groups > Edit (for the auth gate).
+
+cloudflare_api_token  = "PASTE_SCOPED_TOKEN_HERE"
+cloudflare_account_id = "PASTE_ACCOUNT_ID_HERE"
+zone_id               = "PASTE_ZONE_ID_FOR_itlinux.cc"
+
+# The MANUALLY-built tunnel's id (cloudflared tunnel list, after creating demo-argo).
+tunnel_id = "PASTE_DEMO_ARGO_TUNNEL_ID"
+
+# hostname has a default (demo-argo.itlinux.cc) — override only if different.
+# hostname = "demo-argo.itlinux.cc"
+
+# ── Auth gate ─────────────────────────────────────────────────────────
+# true  = gate behind Cloudflare Access (SSO/PIN)
+# false = open to everyone (DNS + tunnel only; Access app/policy not created)
+access_enabled       = true
+allowed_email_domain = "itlinux.cc"
+
+# Optional login methods (leave blank to accept all available IdPs).
+# entra_idp_id = ""
+# otp_idp_id   = ""

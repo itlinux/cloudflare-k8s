@@ -39,6 +39,7 @@ manifests/
 argocd/
   application.yaml       # ArgoCD Application CR — points at manifests/
   root-app.yaml          # App-of-Apps root — adopts everything in argocd/
+terraform/               # optional IaC: DNS route + Access gate (hybrid)
 README-argocd.md         # this document
 .gitignore               # keeps credentials.json out of git
 ```
@@ -460,6 +461,42 @@ resource "cloudflare_zero_trust_access_policy" "demo_argo_allow" {
 > Access protects the **hostname at the edge** — it does not change the tunnel,
 > the ConfigMap, or the ArgoCD sync. You can flip a hostname between open and
 > gated without touching the cluster.
+
+---
+
+## Terraform (optional) — manage DNS + Access as code
+
+The `terraform/` directory provides a **hybrid IaC** option: the `demo-argo`
+tunnel/connector stays **manual** (CLI or dashboard, Step 1), and Terraform
+manages the two Cloudflare-side pieces that benefit from code — the **DNS route**
+and the **Access auth gate**. The cluster/connector side stays GitOps (ArgoCD).
+
+```
+terraform/
+  providers.tf              # cloudflare provider (~> 5.0)
+  variables.tf             # inputs (token, account, zone, tunnel_id, access toggle)
+  dns.tf                   # proxied CNAME hostname -> <tunnel_id>.cfargotunnel.com
+  access.tf                # self-hosted Access app + allow policy (count on access_enabled)
+  outputs.tf               # hostname URL, CNAME target, access status
+  terraform.tfvars.example # copy to terraform.tfvars (gitignored) and fill
+```
+
+Usage:
+
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars   # fill token, account, zone, tunnel_id
+terraform init
+terraform apply
+```
+
+- `access_enabled = true` → creates the Access app + policy (SSO/PIN gate).
+- `access_enabled = false` → only the DNS route is managed; hostname is open.
+- `tunnel_id` is the **manually-built** tunnel's id (`cloudflared tunnel list`).
+
+This replaces the manual `cloudflared tunnel route dns` (DNS) and the dashboard
+Access steps with `terraform apply`, while leaving tunnel creation + the k8s
+connector (ArgoCD) exactly as documented above.
 
 ---
 

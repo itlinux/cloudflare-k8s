@@ -145,6 +145,7 @@ manually; ArgoCD manages the in-cluster connector via GitOps.</p>
 <span class="nf">argocd</span><span class="err">/</span>
 <span class="w">  </span><span class="nf">application.yaml</span><span class="w">       </span><span class="c1"># ArgoCD Application CR — points at manifests/</span>
 <span class="w">  </span><span class="nf">root-app.yaml</span><span class="w">          </span><span class="c1"># App-of-Apps root — adopts everything in argocd/</span>
+<span class="nf">terraform</span><span class="err">/</span><span class="w">               </span><span class="c1"># optional IaC: DNS route + Access gate (hybrid)</span>
 <span class="nf">README-argocd.md</span><span class="w">         </span><span class="c1"># this document</span>
 <span class="na">.gitignore</span><span class="w">               </span><span class="c1"># keeps credentials.json out of git</span>
 </code></pre></div>
@@ -528,6 +529,36 @@ setup is unchanged — Access is a policy layer on the hostname.</p>
 the ConfigMap, or the ArgoCD sync. You can flip a hostname between open and
 gated without touching the cluster.</p>
 </blockquote>
+<hr />
+<h2 id="terraform-optional-manage-dns-access-as-code">Terraform (optional) — manage DNS + Access as code</h2>
+<p>The <code>terraform/</code> directory provides a <strong>hybrid IaC</strong> option: the <code>demo-argo</code>
+tunnel/connector stays <strong>manual</strong> (CLI or dashboard, Step 1), and Terraform
+manages the two Cloudflare-side pieces that benefit from code — the <strong>DNS route</strong>
+and the <strong>Access auth gate</strong>. The cluster/connector side stays GitOps (ArgoCD).</p>
+<div class="codehilite"><pre><span></span><code><span class="n">terraform</span><span class="o">/</span>
+<span class="w">  </span><span class="n">providers</span><span class="o">.</span><span class="n">tf</span><span class="w">              </span><span class="c1"># cloudflare provider (~&gt; 5.0)</span>
+<span class="w">  </span><span class="n">variables</span><span class="o">.</span><span class="n">tf</span><span class="w">             </span><span class="c1"># inputs (token, account, zone, tunnel_id, access toggle)</span>
+<span class="w">  </span><span class="n">dns</span><span class="o">.</span><span class="n">tf</span><span class="w">                   </span><span class="c1"># proxied CNAME hostname -&gt; &lt;tunnel_id&gt;.cfargotunnel.com</span>
+<span class="w">  </span><span class="n">access</span><span class="o">.</span><span class="n">tf</span><span class="w">                </span><span class="c1"># self-hosted Access app + allow policy (count on access_enabled)</span>
+<span class="w">  </span><span class="n">outputs</span><span class="o">.</span><span class="n">tf</span><span class="w">               </span><span class="c1"># hostname URL, CNAME target, access status</span>
+<span class="w">  </span><span class="n">terraform</span><span class="o">.</span><span class="n">tfvars</span><span class="o">.</span><span class="n">example</span><span class="w"> </span><span class="c1"># copy to terraform.tfvars (gitignored) and fill</span>
+</code></pre></div>
+
+<p>Usage:</p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>terraform
+cp<span class="w"> </span>terraform.tfvars.example<span class="w"> </span>terraform.tfvars<span class="w">   </span><span class="c1"># fill token, account, zone, tunnel_id</span>
+terraform<span class="w"> </span>init
+terraform<span class="w"> </span>apply
+</code></pre></div>
+
+<ul>
+<li><code>access_enabled = true</code> → creates the Access app + policy (SSO/PIN gate).</li>
+<li><code>access_enabled = false</code> → only the DNS route is managed; hostname is open.</li>
+<li><code>tunnel_id</code> is the <strong>manually-built</strong> tunnel's id (<code>cloudflared tunnel list</code>).</li>
+</ul>
+<p>This replaces the manual <code>cloudflared tunnel route dns</code> (DNS) and the dashboard
+Access steps with <code>terraform apply</code>, while leaving tunnel creation + the k8s
+connector (ArgoCD) exactly as documented above.</p>
 <hr />
 <h2 id="how-redeploys-work-gitops">How redeploys work (GitOps)</h2>
 <p>With <code>automated</code> + <code>selfHeal</code> + <code>prune</code>, ArgoCD continuously reconciles the
