@@ -98,23 +98,31 @@ cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc
 
 **Option 2 — Dashboard (no CLI needed):**
 
-Zero Trust → **Networks → Tunnels → Create a tunnel** → **Cloudflared** →
-name it `demo-argo`. The dashboard shows an install/run command containing a
-**tunnel token** — for a dashboard-created (“remotely-managed”) tunnel you use
-that **token** instead of a `credentials.json` file:
+Zero Trust → **Networks → Connectors → Create a connector** → **Cloudflared** →
+name it `demo-argo`. (The dashboard section formerly called **Tunnels** is now
+**Connectors** — `dash → Networks → Connectors`; the underlying resource is still
+a Cloudflare Tunnel and the CLI verbs are still `cloudflared tunnel …`.) The
+dashboard shows an install/run command containing a **connector token** — for a
+dashboard-created (“remotely-managed”) connector you use that **token** instead
+of a `credentials.json` file:
 
 ```bash
-# Dashboard-managed tunnel: store the token as the Secret instead of creds file
+# Dashboard-managed connector: store the token as the Secret instead of creds file
 kubectl create namespace cloudflared
 kubectl -n cloudflared create secret generic cloudflared-credentials \
-  --from-literal=token='<TUNNEL-TOKEN-from-dashboard>'
+  --from-literal=token='<CONNECTOR-TOKEN-from-dashboard>'
 ```
 
 Then run the connector with `tunnel run --token` instead of a config file. If you
 go this route, change the Deployment args to:
 `["tunnel", "run", "--token", "$(TUNNEL_TOKEN)"]` and inject the token via an
 env var from the Secret. Public hostnames + routes are configured in the
-dashboard’s tunnel UI rather than the ConfigMap `ingress:` block.
+dashboard’s **Connectors** UI rather than the ConfigMap `ingress:` block.
+
+> Terminology (2026): the dashboard menu is **Networks → Connectors** (was
+> *Tunnels*). The CLI is unchanged (`cloudflared tunnel create/run/route`), and
+> the resource is still a “Cloudflare Tunnel.” This doc says **connector** for
+> the dashboard/runtime component and **tunnel** for the CLI/resource.
 
 > This README’s manifests use the **CLI / credentials-file** model (Option 1),
 > which keeps the routing config in git (the ConfigMap `ingress:`). The dashboard

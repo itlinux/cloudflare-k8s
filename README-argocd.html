@@ -194,22 +194,29 @@ cloudflared<span class="w"> </span>tunnel<span class="w"> </span>route<span clas
 </code></pre></div>
 
 <p><strong>Option 2 — Dashboard (no CLI needed):</strong></p>
-<p>Zero Trust → <strong>Networks → Tunnels → Create a tunnel</strong> → <strong>Cloudflared</strong> →
-name it <code>demo-argo</code>. The dashboard shows an install/run command containing a
-<strong>tunnel token</strong> — for a dashboard-created (“remotely-managed”) tunnel you use
-that <strong>token</strong> instead of a <code>credentials.json</code> file:</p>
-<div class="codehilite"><pre><span></span><code><span class="c1"># Dashboard-managed tunnel: store the token as the Secret instead of creds file</span>
+<p>Zero Trust → <strong>Networks → Connectors → Create a connector</strong> → <strong>Cloudflared</strong> →
+name it <code>demo-argo</code>. (The dashboard section formerly called <strong>Tunnels</strong> is now
+<strong>Connectors</strong> — <code>dash → Networks → Connectors</code>; the underlying resource is still
+a Cloudflare Tunnel and the CLI verbs are still <code>cloudflared tunnel …</code>.) The
+dashboard shows an install/run command containing a <strong>connector token</strong> — for a
+dashboard-created (“remotely-managed”) connector you use that <strong>token</strong> instead
+of a <code>credentials.json</code> file:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Dashboard-managed connector: store the token as the Secret instead of creds file</span>
 kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>cloudflared
 kubectl<span class="w"> </span>-n<span class="w"> </span>cloudflared<span class="w"> </span>create<span class="w"> </span>secret<span class="w"> </span>generic<span class="w"> </span>cloudflared-credentials<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">token</span><span class="o">=</span><span class="s1">&#39;&lt;TUNNEL-TOKEN-from-dashboard&gt;&#39;</span>
+<span class="w">  </span>--from-literal<span class="o">=</span><span class="nv">token</span><span class="o">=</span><span class="s1">&#39;&lt;CONNECTOR-TOKEN-from-dashboard&gt;&#39;</span>
 </code></pre></div>
 
 <p>Then run the connector with <code>tunnel run --token</code> instead of a config file. If you
 go this route, change the Deployment args to:
 <code>["tunnel", "run", "--token", "$(TUNNEL_TOKEN)"]</code> and inject the token via an
 env var from the Secret. Public hostnames + routes are configured in the
-dashboard’s tunnel UI rather than the ConfigMap <code>ingress:</code> block.</p>
+dashboard’s <strong>Connectors</strong> UI rather than the ConfigMap <code>ingress:</code> block.</p>
 <blockquote>
+<p>Terminology (2026): the dashboard menu is <strong>Networks → Connectors</strong> (was
+<em>Tunnels</em>). The CLI is unchanged (<code>cloudflared tunnel create/run/route</code>), and
+the resource is still a “Cloudflare Tunnel.” This doc says <strong>connector</strong> for
+the dashboard/runtime component and <strong>tunnel</strong> for the CLI/resource.</p>
 <p>This README’s manifests use the <strong>CLI / credentials-file</strong> model (Option 1),
 which keeps the routing config in git (the ConfigMap <code>ingress:</code>). The dashboard
 token model moves routing into the Cloudflare UI — pick one, don’t mix.</p>
