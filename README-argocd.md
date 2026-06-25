@@ -38,6 +38,7 @@ manifests/
   kustomization.yaml     # pins the cloudflared image tag (no :latest drift)
 argocd/
   application.yaml       # ArgoCD Application CR — points at manifests/
+  root-app.yaml          # App-of-Apps root — adopts everything in argocd/
 README-argocd.md         # this document
 .gitignore               # keeps credentials.json out of git
 ```
@@ -229,27 +230,89 @@ spec:
 
 ---
 
-## Step 4 — Register + sync
+## Step 4 — Register the app (GitOps, no ArgoCD CLI)
+
+You do **not** need the `argocd` CLI. There are two pure-GitOps ways to register
+the Application so ArgoCD pulls the repo and reconciles automatically.
+
+### 4a. One-time bootstrap (kubectl apply the Application CR)
+
+A single declarative apply — after this, everything is git-driven:
 
 ```bash
-# Register the Application
 kubectl apply -f argocd/application.yaml
+```
 
-# …or via the ArgoCD CLI
-argocd app create cloudflared \
-  --repo https://github.com/itlinux/cloudflare-k8s.git \
-  --revision argo --path manifests \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace cloudflared \
-  --sync-policy automated --auto-prune --self-heal \
-  --sync-option CreateNamespace=true
+That CR points at the `argo` branch / `manifests` path with `automated` sync, so
+ArgoCD immediately pulls and deploys, then keeps reconciling on every push. No
+CLI, no manual sync. This one apply is the only imperative step — and even it can
+be eliminated with App-of-Apps below.
 
-# Sync + verify
-argocd app sync cloudflared
-argocd app get cloudflared
-kubectl -n cloudflared logs -l app=cloudflared --tail=20   # "Registered tunnel connection"
+### 4b. App-of-Apps — zero per-app registration (recommended for CI/CD)
+
+Point ArgoCD at a **single root Application** once; from then on you add new
+apps just by committing YAML — ArgoCD discovers and deploys them. Nothing
+imperative per app, ever.
+
+`argocd/root-app.yaml` (the only thing you ever register):
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/itlinux/cloudflare-k8s.git
+    targetRevision: argo
+    path: argocd            # ArgoCD watches this DIR for child Applications
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+```
+
+Because `argocd/application.yaml` (the cloudflared app) lives in that `argocd/`
+dir, the root app picks it up automatically. To add another service later, drop
+a new `argocd/<name>.yaml` and push — ArgoCD deploys it with no extra commands.
+
+### 4c. Connect the repo to ArgoCD (declarative, for private repos)
+
+If the repo is private, register the credentials as a Secret (also GitOps-able)
+rather than `argocd repo add`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-k8s-repo
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/itlinux/cloudflare-k8s.git
+  password: <github-pat>      # or use SSH key fields for git@ URLs
+  username: git
+```
+
+Public repo? Skip this — ArgoCD pulls anonymously.
+
+### Verify (kubectl only, no argocd CLI)
+
+```bash
+kubectl -n argocd get applications                          # SYNCED / HEALTHY
+kubectl -n cloudflared get pods                             # cloudflared running
+kubectl -n cloudflared logs -l app=cloudflared --tail=20    # "Registered tunnel connection"
 curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
 ```
+
+> **The whole point:** after the one-time bootstrap, *adding the repo = ArgoCD
+> pulls it and does the magic.* A push to the `argo` branch is the only action
+> needed to deploy or change anything — your CI/CD never calls the ArgoCD CLI.
 
 ---
 

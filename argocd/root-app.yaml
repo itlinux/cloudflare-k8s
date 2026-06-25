@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd          # the ArgoCD "App of Apps" root
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # The root watches the argocd/ directory of this repo and adopts every
+  # child Application manifest it finds there (currently application.yaml =
+  # the cloudflared tunnel app). Add a new argocd/<name>.yaml + push and
+  # ArgoCD deploys it automatically — no `argocd app create`, no kubectl.
+  source:
+    repoURL: https://github.com/itlinux/cloudflare-k8s.git
+    targetRevision: argo
+    path: argocd
+    directory:
+      recurse: false
+      # Only treat Application CRs as children; ignore the root itself.
+      exclude: "root-app.yaml"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
