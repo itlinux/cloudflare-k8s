@@ -55,7 +55,7 @@ README-argocd.md         # this document
 
 ---
 
-## Step 0 — Connect to your EKS cluster (AWS CLI / eksctl)
+## Step 0 — Connect to your existing EKS cluster (AWS CLI)
 
 This deployment runs on **Amazon EKS**. Wire up cluster access first; every
 `kubectl` step below then targets the EKS cluster.
@@ -63,11 +63,10 @@ This deployment runs on **Amazon EKS**. Wire up cluster access first; every
 ### Install the tooling
 
 ```bash
-# macOS (Homebrew)
-brew install awscli eksctl kubectl helm
+# macOS (Homebrew). eksctl only needed if you ever create/manage clusters.
+brew install awscli kubectl helm
 
 aws --version          # aws-cli/2.x
-eksctl version
 kubectl version --client
 ```
 
@@ -89,19 +88,6 @@ aws eks update-kubeconfig --name <cluster-name> --region <region>
 
 kubectl config current-context          # arn:aws:eks:<region>:<acct>:cluster/<name>
 kubectl get nodes                       # confirm the cluster is reachable
-```
-
-### (Optional) Create an EKS cluster with eksctl
-
-If you don't have one yet:
-
-```bash
-eksctl create cluster \
-  --name demo-argo \
-  --region <region> \
-  --nodes 2 --node-type t3.medium \
-  --managed
-# eksctl writes the kubeconfig context automatically when it finishes.
 ```
 
 ### Install ArgoCD on the cluster (if not already present)

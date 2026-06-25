@@ -159,15 +159,14 @@ manually; ArgoCD manages the in-cluster connector via GitOps.</p>
 <li>A domain managed in Cloudflare (this guide uses <code>demo-argo.itlinux.cc</code>).</li>
 </ul>
 <hr />
-<h2 id="step-0-connect-to-your-eks-cluster-aws-cli-eksctl">Step 0 — Connect to your EKS cluster (AWS CLI / eksctl)</h2>
+<h2 id="step-0-connect-to-your-existing-eks-cluster-aws-cli">Step 0 — Connect to your existing EKS cluster (AWS CLI)</h2>
 <p>This deployment runs on <strong>Amazon EKS</strong>. Wire up cluster access first; every
 <code>kubectl</code> step below then targets the EKS cluster.</p>
 <h3 id="install-the-tooling">Install the tooling</h3>
-<div class="codehilite"><pre><span></span><code><span class="c1"># macOS (Homebrew)</span>
-brew<span class="w"> </span>install<span class="w"> </span>awscli<span class="w"> </span>eksctl<span class="w"> </span>kubectl<span class="w"> </span>helm
+<div class="codehilite"><pre><span></span><code><span class="c1"># macOS (Homebrew). eksctl only needed if you ever create/manage clusters.</span>
+brew<span class="w"> </span>install<span class="w"> </span>awscli<span class="w"> </span>kubectl<span class="w"> </span>helm
 
 aws<span class="w"> </span>--version<span class="w">          </span><span class="c1"># aws-cli/2.x</span>
-eksctl<span class="w"> </span>version
 kubectl<span class="w"> </span>version<span class="w"> </span>--client
 </code></pre></div>
 
@@ -185,16 +184,6 @@ aws<span class="w"> </span>eks<span class="w"> </span>update-kubeconfig<span cla
 
 kubectl<span class="w"> </span>config<span class="w"> </span>current-context<span class="w">          </span><span class="c1"># arn:aws:eks:&lt;region&gt;:&lt;acct&gt;:cluster/&lt;name&gt;</span>
 kubectl<span class="w"> </span>get<span class="w"> </span>nodes<span class="w">                       </span><span class="c1"># confirm the cluster is reachable</span>
-</code></pre></div>
-
-<h3 id="optional-create-an-eks-cluster-with-eksctl">(Optional) Create an EKS cluster with eksctl</h3>
-<p>If you don't have one yet:</p>
-<div class="codehilite"><pre><span></span><code>eksctl<span class="w"> </span>create<span class="w"> </span>cluster<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--name<span class="w"> </span>demo-argo<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--region<span class="w"> </span>&lt;region&gt;<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--nodes<span class="w"> </span><span class="m">2</span><span class="w"> </span>--node-type<span class="w"> </span>t3.medium<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--managed
-<span class="c1"># eksctl writes the kubeconfig context automatically when it finishes.</span>
 </code></pre></div>
 
 <h3 id="install-argocd-on-the-cluster-if-not-already-present">Install ArgoCD on the cluster (if not already present)</h3>
