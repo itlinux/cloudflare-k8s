@@ -11,7 +11,7 @@ manually; ArgoCD manages the in-cluster connector via GitOps.
 
 ```
  Internet ──▶ Cloudflare edge ──▶ demo-argo tunnel ──▶ cloudflared pods ──▶ Service
-   (DNS: demo-argo.itlinux.cc)        (outbound-only)     (in cluster)      (front:80)
+   (DNS: demo-argo.example.com)        (outbound-only)     (in cluster)      (front:80)
 ```
 
 ![Architecture: ArgoCD GitOps + demo-argo tunnel flow](docs/architecture.png)
@@ -22,7 +22,7 @@ manually; ArgoCD manages the in-cluster connector via GitOps.
 2. **ArgoCD** watches the `argo` branch and applies the manifests into the `cloudflared` namespace (auto-sync, selfHeal, prune).
 3. **Operator (one-time, out-of-band)** — builds the `demo-argo` tunnel with the `cloudflared` CLI, loads its `credentials.json` as a Secret, and creates the DNS route. None of this is in git.
 4. **cloudflared pods** mount the creds Secret and open an **outbound-only HTTP/2 tunnel** to the Cloudflare edge — no inbound ports, no public IP.
-5. **User traffic** hits `https://demo-argo.itlinux.cc` → Cloudflare edge → the `demo-argo` tunnel → a cloudflared pod → the in-cluster `front` Service.
+5. **User traffic** hits `https://demo-argo.example.com` → Cloudflare edge → the `demo-argo` tunnel → a cloudflared pod → the in-cluster `front` Service.
 
 - **No inbound exposure** — `cloudflared` dials *out* to Cloudflare; nothing is opened on the cluster.
 - **ArgoCD** continuously reconciles the connector Deployment/ConfigMap to the `argo` branch.
@@ -51,7 +51,7 @@ README-argocd.md         # this document
 - A running Kubernetes cluster with `kubectl` access (EKS, GKE, k3s, …).
 - **ArgoCD** installed in the cluster (namespace `argocd`).
 - `cloudflared` CLI on your workstation.
-- A domain managed in Cloudflare (this guide uses `demo-argo.itlinux.cc`).
+- A domain managed in Cloudflare (this guide uses `demo-argo.example.com`).
 
 ---
 
@@ -133,7 +133,7 @@ connector there at all.
 **Option 1 — CLI (from your laptop):**
 
 ```bash
-cloudflared login                      # browser auth — pick the itlinux.cc zone
+cloudflared login                      # browser auth — pick the example.com zone
 cloudflared tunnel create demo-argo    # writes ~/.cloudflared/<TUNNEL-ID>.json
 
 kubectl create namespace cloudflared
@@ -145,7 +145,7 @@ kubectl -n cloudflared create secret generic cloudflared-credentials \
   --from-file=credentials.json="$HOME/.cloudflared/${TID}.json"
 
 # Route the public hostname to the tunnel (creates the proxied CNAME)
-cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc
+cloudflared tunnel route dns demo-argo demo-argo.example.com
 ```
 
 **Option 2 — Dashboard (no CLI needed):**
@@ -237,7 +237,7 @@ data:
     no-autoupdate: true
     credentials-file: /etc/cloudflared/creds/credentials.json
     ingress:
-    - hostname: "demo-argo.itlinux.cc"
+    - hostname: "demo-argo.example.com"
       service: http://front.default.svc.cluster.local:80
     - service: http_status:404
 ```
@@ -396,7 +396,7 @@ argocd app get cloudflared                                  # Synced / Healthy
 kubectl -n argocd get applications                          # SYNCED / HEALTHY
 kubectl -n cloudflared get pods                             # cloudflared running
 kubectl -n cloudflared logs -l app=cloudflared --tail=20    # "Registered tunnel connection"
-curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
+curl -I https://demo-argo.example.com                        # HTTP/2 200
 ```
 
 > **Redeploys are git-driven:** after the one-time registration, a push to the
@@ -410,13 +410,13 @@ curl -I https://demo-argo.itlinux.cc                        # HTTP/2 200
 ### Prerequisite: the domain must be onboarded in Cloudflare
 
 DNS routing only works if the hostname's **domain is already a zone in your
-Cloudflare account** (e.g. `itlinux.cc`), with its nameservers pointing at
+Cloudflare account** (e.g. `example.com`), with its nameservers pointing at
 Cloudflare and the zone **Active**.
 
 - Add the site: dash → **Add a site** → enter the domain → pick a plan →
   Cloudflare gives you two nameservers.
 - Update the nameservers at your registrar to those Cloudflare NS records.
-- Wait for the zone status to show **Active** (`dig NS itlinux.cc` returns the
+- Wait for the zone status to show **Active** (`dig NS example.com` returns the
   Cloudflare nameservers).
 - If you use **Cloudflare Registrar**, the domain is already onboarded.
 
@@ -429,12 +429,12 @@ Without an Active zone, `cloudflared tunnel route dns` (and the Terraform
 The public hostname must resolve to **the tunnel**, not to any server IP. `cloudflared tunnel route dns` creates a **proxied CNAME** in Cloudflare DNS:
 
 ```
-demo-argo.itlinux.cc  CNAME  <tunnel-id>.cfargotunnel.com   (proxied / orange-cloud)
+demo-argo.example.com  CNAME  <tunnel-id>.cfargotunnel.com   (proxied / orange-cloud)
 ```
 
 ```bash
-cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc
-dig +short demo-argo.itlinux.cc       # returns Cloudflare proxy IPs, NOT the cfargotunnel target
+cloudflared tunnel route dns demo-argo demo-argo.example.com
+dig +short demo-argo.example.com       # returns Cloudflare proxy IPs, NOT the cfargotunnel target
 ```
 
 - The hostname here **must match** the `ingress:` hostname in the ConfigMap.
@@ -444,7 +444,7 @@ dig +short demo-argo.itlinux.cc       # returns Cloudflare proxy IPs, NOT the cf
 ### Option A — Open to everyone (public service)
 
 Just the tunnel + DNS above. Anyone on the internet can reach
-`https://demo-argo.itlinux.cc`; the connector proxies to the in-cluster Service.
+`https://demo-argo.example.com`; the connector proxies to the in-cluster Service.
 Use for public sites/APIs. No identity check.
 
 ### Option B — Gated by Cloudflare Access (authenticated users only)
@@ -454,7 +454,7 @@ identities (Entra/Okta/One-time PIN, etc.) can reach it. The tunnel/DNS/ArgoCD
 setup is unchanged — Access is a policy layer on the hostname.
 
 Dashboard: **Zero Trust → Access → Applications → Add → Self-hosted**
-- **Application domain:** `demo-argo.itlinux.cc`
+- **Application domain:** `demo-argo.example.com`
 - **Identity providers:** select your IdP(s) (e.g. Entra) and/or One-time PIN
 - **Policy:** Allow → Include → emails / email-domain / IdP groups
 - Save. Now hitting the hostname shows the Access login page first; only
@@ -466,7 +466,7 @@ Terraform equivalent (self-hosted Access app + policy):
 resource "cloudflare_zero_trust_access_application" "demo_argo" {
   account_id       = var.cloudflare_account_id
   name             = "Demo Argo (k8s)"
-  domain           = "demo-argo.itlinux.cc"
+  domain           = "demo-argo.example.com"
   session_duration = "1h"
   # Show the login picker (SSO + One-time PIN); no auto-redirect.
   allowed_idps              = compact([var.entra_idp_id, var.otp_idp_id])
@@ -479,7 +479,7 @@ resource "cloudflare_zero_trust_access_policy" "demo_argo_allow" {
   name           = "Allow team"
   decision       = "allow"
   precedence     = 1
-  include = [{ email_domain = { domain = "itlinux.cc" } }]
+  include = [{ email_domain = { domain = "example.com" } }]
 }
 ```
 
@@ -558,4 +558,4 @@ cluster to the `argo` branch:
   doesn’t exist in that namespace. Create it (e.g. `kubectl create deployment front
   --image=nginx && kubectl expose deployment front --port=80`).
 - **Hostname won’t resolve:** ensure the DNS route exists —
-  `cloudflared tunnel route dns demo-argo demo-argo.itlinux.cc`.
+  `cloudflared tunnel route dns demo-argo demo-argo.example.com`.
