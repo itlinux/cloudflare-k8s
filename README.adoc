@@ -3,6 +3,15 @@
 Run a Cloudflare Tunnel from inside the cluster so Services are reachable on a
 public hostname without exposing any public IP on the cluster.
 
+[NOTE]
+====
+*GitOps / ArgoCD variant:* a full ArgoCD-managed setup (with Terraform for
+DNS + Access, architecture diagrams, and EKS notes) lives on the *`argo`*
+branch — see `README-argocd.md` there. That branch is the deployable GitOps
+source (ArgoCD tracks `targetRevision: argo`) and is intentionally kept
+separate from `main`. This `main` README covers the manual `kubectl`/CLI flow.
+====
+
 == Prerequisites
 
 * A running Kubernetes cluster with `kubectl` access.
