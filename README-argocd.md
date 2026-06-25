@@ -366,18 +366,24 @@ Because `argocd/application.yaml` (the cloudflared app) lives in that `argocd/`
 dir, the root app picks it up automatically. To add another service later, drop
 a new `argocd/<name>.yaml` and push — ArgoCD deploys it with no extra commands.
 
-### 4d. Connect the repo to ArgoCD (private repos)
+### 4d. Connect the repo to ArgoCD
 
-If the repo is private, register the credentials. Via CLI:
+ArgoCD must know about the repo before it can pull it. Easiest is the **UI**
+(what we used): **ArgoCD UI → Settings → Repositories → Connect Repo** → enter
+the repo URL (and a GitHub PAT / SSH key if private) → **Connect**. Once the repo
+shows *Successful*, ArgoCD pulls it automatically — no CLI registration needed,
+and your CI/CD just pushes commits.
+
+Equivalent CLI / declarative options (optional):
 
 ```bash
+# CLI
 argocd repo add https://github.com/itlinux/cloudflare-k8s.git \
   --username git --password <github-pat>
 ```
 
-…or declaratively as a Secret (GitOps-able):
-
 ```yaml
+# …or declaratively as a Secret (GitOps-able)
 apiVersion: v1
 kind: Secret
 metadata:
@@ -392,7 +398,12 @@ stringData:
   username: git
 ```
 
-Public repo? Skip this — ArgoCD pulls anonymously.
+Public repo? You can skip this entirely — ArgoCD pulls anonymously.
+
+> **CI/CD has nothing to register.** The repo is connected once (UI/CLI/Secret)
+> and the app is registered once (4a–4c). After that, the pipeline only does
+> `git push` to the `argo` branch — ArgoCD detects the commit, pulls, and syncs.
+> No `argocd` CLI call and no repo registration runs in CI/CD.
 
 ### Verify
 
