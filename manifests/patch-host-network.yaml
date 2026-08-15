@@ -1,0 +1,44 @@
+# Optional patch: put cloudflared in the NODE'S network namespace.
+#
+# WHEN to enable this:
+#   Your k8s nodes sit directly on a physical LAN (e.g. Proxmox VMs on
+#   192.168.1.0/24, or bare-metal servers on a home/office network) AND you
+#   want cloudflared to advertise that LAN — the same way a cloudflared VM
+#   or Docker container on the LAN would. With hostNetwork the pod sees
+#   exactly what the node sees: node LAN NICs, LAN broadcast, LAN routes.
+#
+# WHEN NOT to enable this:
+#   - EKS / GKE / AKS / any managed cloud k8s. The node is in a cloud VPC
+#     (10.x.x.x), NOT on your LAN, so hostNetwork gains you nothing on those
+#     platforms — the pod would see the VPC, which the default networking
+#     already reaches. Use the standard manifest instead.
+#   - You only need to publish k8s Services / ClusterIP / pod-network CIDRs.
+#     The default pod networking already sees those.
+#
+# TRADE-OFFS you accept by enabling this:
+#   - The pod binds directly to the node's :2000 (metrics). If anything else
+#     on the node uses :2000, you get a collision. Change the metrics port
+#     in cloudflared.yml (args + livenessProbe) if needed.
+#   - Loses NetworkPolicy isolation for this pod (it's on the host netns).
+#   - dnsPolicy is set to ClusterFirstWithHostNet so kube-dns still works.
+#
+# HOW to enable:
+#   In kustomization.yaml, uncomment the "patches:" block that references
+#   this file (see the commented section). ArgoCD will roll the change.
+#
+# HOW to verify after rollout:
+#   kubectl exec -it deploy/cloudflared -- ip -br addr
+#     -> should show the NODE's LAN interfaces (e.g. 192.168.1.x), NOT
+#        a pod-CIDR IP (10.244.x.x / 10.42.x.x).
+#   kubectl exec -it deploy/cloudflared -- ip route
+#     -> should include a route to the LAN subnet you want to publish.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet

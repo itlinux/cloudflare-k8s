@@ -145,6 +145,57 @@ curl -I https://k8s.itlinux.cc
 
 `HTTP/2 200` means tunnel + DNS + ingress + origin are all wired correctly.
 
+
+== Optional: hostNetwork mode (on-prem clusters, publish a physical LAN)
+
+By default the cloudflared pod uses standard k8s pod networking, so it sees the
+cluster's pod/service network and reaches external destinations via the node.
+That's the right choice on EKS/GKE/AKS and for tunnels that only publish
+hostnames or ClusterIP services.
+
+If you're running k8s **on-prem** — nodes sitting directly on a physical LAN
+(e.g. Proxmox VMs on `192.168.1.0/24`, bare-metal servers on a home/office
+network) — and you want cloudflared to advertise that LAN CIDR the way a
+cloudflared VM or Docker container on the LAN would, enable `hostNetwork: true`.
+With hostNetwork the pod runs in the node's network namespace and sees exactly
+the same NICs and routes the node does.
+
+DO NOT enable this on EKS/GKE/AKS. Managed cloud nodes live in a VPC
+(`10.x.x.x`), not on your LAN, so hostNetwork gains you nothing there.
+
+Enable it by uncommenting the `patches:` block at the bottom of
+`manifests/kustomization.yaml`:
+
+----
+patches:
+  - path: patch-host-network.yaml
+    target:
+      kind: Deployment
+      name: cloudflared
+----
+
+ArgoCD (or `kubectl apply -k manifests/`) will roll the change. Verify the pod
+is actually on the node's LAN afterwards:
+
+----
+kubectl exec -it deploy/cloudflared -- ip -br addr
+# expect the NODE's LAN interfaces (e.g. 192.168.1.x), NOT a pod-CIDR IP.
+kubectl exec -it deploy/cloudflared -- ip route
+# expect a route to the LAN subnet you plan to publish.
+----
+
+Then add the LAN CIDR under the tunnel in the dashboard
+(**Networks -> Tunnels -> your tunnel -> Private Network**) or via
+`cloudflared tunnel route ip add 192.168.1.0/24 <tunnel-name>`.
+
+Trade-offs to know:
+
+* The pod binds directly to the node's `:2000` (cloudflared metrics). If
+  something else on the node uses that port, change the metrics port in
+  `cloudflared.yml` (both `args` and the livenessProbe).
+* NetworkPolicy no longer isolates this pod (it lives on the host netns).
+* See `manifests/patch-host-network.yaml` for the full rationale.
+
 == Troubleshooting
 
 Tunnel shows "down" / one connection flaps with `control stream encountered a

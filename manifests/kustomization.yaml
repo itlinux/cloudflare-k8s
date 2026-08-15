@@ -13,3 +13,17 @@ resources:
 images:
   - name: cloudflare/cloudflared
     newTag: "2026.6.1"
+
+# ---- OPTIONAL: hostNetwork mode (on-prem clusters only) ----------------------
+# Uncomment the block below to run cloudflared in the NODE's network namespace,
+# so the pod sees the node's LAN NICs directly (e.g. 192.168.1.0/24). Required
+# when you want cloudflared to advertise a physical LAN CIDR from an on-prem
+# k8s cluster. See patch-host-network.yaml for the full rationale, trade-offs,
+# and verification steps. DO NOT enable on EKS/GKE/AKS — nodes are in a cloud
+# VPC, not on your LAN, so hostNetwork buys you nothing there.
+#
+# patches:
+#   - path: patch-host-network.yaml
+#     target:
+#       kind: Deployment
+#       name: cloudflared
